@@ -5,6 +5,12 @@ run:
     - !bench
 
 linters-settings:
+  depguard:
+    rules:
+      main:
+        allow:
+          - $gostd
+          - github.com
   funlen:
     lines: 150
     statements: 80
