@@ -1,66 +1,48 @@
 package hw10programoptimization
 
 import (
-	"encoding/json"
+	"bufio"
+	"errors"
 	"fmt"
 	"io"
-	"regexp"
 	"strings"
-)
 
-type User struct {
-	ID       int
-	Name     string
-	Username string
-	Email    string
-	Phone    string
-	Password string
-	Address  string
-}
+	"github.com/jmequai/otus-golang/hw10_program_optimization/model"
+)
 
 type DomainStat map[string]int
 
 func GetDomainStat(r io.Reader, domain string) (DomainStat, error) {
-	u, err := getUsers(r)
-	if err != nil {
-		return nil, fmt.Errorf("get users error: %w", err)
-	}
-	return countDomains(u, domain)
-}
+	stat := make(DomainStat)
 
-type users [100_000]User
-
-func getUsers(r io.Reader) (result users, err error) {
-	content, err := io.ReadAll(r)
-	if err != nil {
-		return
+	if domain == "" {
+		return stat, errors.New("domain must not be empty")
 	}
 
-	lines := strings.Split(string(content), "\n")
-	for i, line := range lines {
-		var user User
-		if err = json.Unmarshal([]byte(line), &user); err != nil {
-			return
-		}
-		result[i] = user
-	}
-	return
-}
+	suffix := "." + domain
 
-func countDomains(u users, domain string) (DomainStat, error) {
-	result := make(DomainStat)
+	scanner := bufio.NewScanner(r)
 
-	for _, user := range u {
-		matched, err := regexp.Match("\\."+domain, []byte(user.Email))
-		if err != nil {
-			return nil, err
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		user := &model.User{}
+
+		if err := user.UnmarshalJSON(line); err != nil {
+			return stat, err
 		}
 
-		if matched {
-			num := result[strings.ToLower(strings.SplitN(user.Email, "@", 2)[1])]
-			num++
-			result[strings.ToLower(strings.SplitN(user.Email, "@", 2)[1])] = num
+		if strings.HasSuffix(user.Email, suffix) {
+			parts := strings.SplitN(user.Email, "@", 3)
+
+			if len(parts) != 2 {
+				return stat, fmt.Errorf("invalid email %q", user.Email)
+			}
+
+			key := strings.ToLower(parts[1])
+
+			stat[key]++
 		}
 	}
-	return result, nil
+
+	return stat, nil
 }
