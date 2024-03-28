@@ -29,7 +29,7 @@ func TestTelnetClient(t *testing.T) {
 			timeout, err := time.ParseDuration("10s")
 			require.NoError(t, err)
 
-			client := NewTelnetClient(l.Addr().String(), timeout, io.NopCloser(in), out)
+			client := NewTelnetClient(l.Addr().String(), timeout, io.NopCloser(in), out, nil)
 			require.NoError(t, client.Connect())
 			defer func() { require.NoError(t, client.Close()) }()
 
@@ -61,5 +61,60 @@ func TestTelnetClient(t *testing.T) {
 		}()
 
 		wg.Wait()
+	})
+
+	t.Run("no connection", func(t *testing.T) {
+		in := &bytes.Buffer{}
+		out := &bytes.Buffer{}
+
+		client := NewTelnetClient("127.0.0.1:4242", 10*time.Second, io.NopCloser(in), out, nil)
+
+		require.ErrorContains(t, client.Connect(), "connection refused")
+	})
+
+	t.Run("timeout", func(t *testing.T) {
+		_, err := net.Listen("tcp", "127.0.0.1:4242")
+		require.NoError(t, err)
+
+		in := &bytes.Buffer{}
+		out := &bytes.Buffer{}
+
+		client := NewTelnetClient("127.0.0.1:4242", 10*time.Nanosecond, io.NopCloser(in), out, nil)
+
+		require.Error(t, client.Connect())
+		require.ErrorContains(t, client.Connect(), "i/o timeout")
+
+		client.Close()
+	})
+
+	t.Run("closed connection", func(t *testing.T) {
+		_, err := net.Listen("tcp", "127.0.0.1:4243")
+		require.NoError(t, err)
+
+		in := &bytes.Buffer{}
+		out := &bytes.Buffer{}
+
+		client := NewTelnetClient("127.0.0.1:4243", 10*time.Second, io.NopCloser(in), out, nil)
+
+		require.NoError(t, client.Connect())
+		require.NoError(t, client.Close())
+
+		in.WriteString("hello\n")
+		require.ErrorIs(t, client.Send(), ErrNoConnection)
+	})
+
+	t.Run("closed connection", func(t *testing.T) {
+		_, err := net.Listen("tcp", "127.0.0.1:4245")
+		require.NoError(t, err)
+
+		in := &bytes.Buffer{}
+		out := &bytes.Buffer{}
+
+		client := NewTelnetClient("127.0.0.1:4245", 10*time.Second, io.NopCloser(in), out, nil)
+
+		require.NoError(t, client.Connect())
+		require.NoError(t, client.Close())
+
+		require.ErrorIs(t, client.Receive(), ErrNoConnection)
 	})
 }
